@@ -503,6 +503,29 @@ show_vm_performance() {
     fi
 }
 
+run_remote_script() {
+    local url="$1"
+    local title="$2"
+
+    print_status "INFO" "Starting: $title"
+
+    if ! command -v bash >/dev/null; then
+        print_status "ERROR" "bash is required"
+        return 1
+    fi
+
+    if command -v curl >/dev/null; then
+        bash <(curl -fsSL "$url")
+    elif command -v wget >/dev/null; then
+        bash <(wget -qO- "$url")
+    else
+        print_status "ERROR" "curl or wget is required"
+        return 1
+    fi
+
+    print_status "SUCCESS" "$title completed"
+}
+
 # Main menu function
 main_menu() {
     while true; do
@@ -530,6 +553,7 @@ main_menu() {
             echo "  3) Stop a VM"
             echo "  4) Show VM info"
             echo "  5) Show VM performance"
+            echo "  6) Install Blueprint (Pterodactyl)"
         fi
         echo "  0) Exit"
         echo
@@ -580,6 +604,11 @@ main_menu() {
                     fi
                 fi
                 ;;
+                6)
+    run_remote_script \
+    "https://raw.githubusercontent.com/mahimxyzz/Vps/refs/heads/main/cd/Blueprint2.sh" \
+    "BLUEPRINT SETUP"
+    ;;
             0)
                 print_status "INFO" "Goodbye!"
                 exit 0
