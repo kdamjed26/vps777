@@ -406,23 +406,6 @@ start_vm() {
     fi
 }
 
-# Function to delete a VM
-delete_vm() {
-    local vm_name=$1
-    
-    print_status "WARN" "This will permanently delete VM '$vm_name' and all its data!"
-    read -p "$(print_status "INPUT" "Are you sure? (y/N): ")" -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if load_vm_config "$vm_name"; then
-            rm -f "$IMG_FILE" "$SEED_FILE" "$VM_DIR/$vm_name.conf"
-            print_status "SUCCESS" "VM '$vm_name' has been deleted"
-        fi
-    else
-        print_status "INFO" "Deletion cancelled"
-    fi
-}
-
 # Function to show VM info
 show_vm_info() {
     local vm_name=$1
@@ -477,209 +460,6 @@ stop_vm() {
         else
             print_status "INFO" "VM $vm_name is not running"
         fi
-    fi
-}
-
-# Function to edit VM configuration
-edit_vm_config() {
-    local vm_name=$1
-    
-    if load_vm_config "$vm_name"; then
-        print_status "INFO" "Editing VM: $vm_name"
-        
-        while true; do
-            echo "What would you like to edit?"
-            echo "  1) Hostname"
-            echo "  2) Username"
-            echo "  3) Password"
-            echo "  4) SSH Port"
-            echo "  5) GUI Mode"
-            echo "  6) Port Forwards"
-            echo "  7) Memory (RAM)"
-            echo "  8) CPU Count"
-            echo "  9) Disk Size"
-            echo "  0) Back to main menu"
-            
-            read -p "$(print_status "INPUT" "Enter your choice: ")" edit_choice
-            
-            case $edit_choice in
-                1)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enter new hostname (current: $HOSTNAME): ")" new_hostname
-                        new_hostname="${new_hostname:-$HOSTNAME}"
-                        if validate_input "name" "$new_hostname"; then
-                            HOSTNAME="$new_hostname"
-                            break
-                        fi
-                    done
-                    ;;
-                2)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enter new username (current: $USERNAME): ")" new_username
-                        new_username="${new_username:-$USERNAME}"
-                        if validate_input "username" "$new_username"; then
-                            USERNAME="$new_username"
-                            break
-                        fi
-                    done
-                    ;;
-                3)
-                    while true; do
-                        read -s -p "$(print_status "INPUT" "Enter new password (current: ****): ")" new_password
-                        new_password="${new_password:-$PASSWORD}"
-                        echo
-                        if [ -n "$new_password" ]; then
-                            PASSWORD="$new_password"
-                            break
-                        else
-                            print_status "ERROR" "Password cannot be empty"
-                        fi
-                    done
-                    ;;
-                4)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enter new SSH port (current: $SSH_PORT): ")" new_ssh_port
-                        new_ssh_port="${new_ssh_port:-$SSH_PORT}"
-                        if validate_input "port" "$new_ssh_port"; then
-                            # Check if port is already in use
-                            if [ "$new_ssh_port" != "$SSH_PORT" ] && ss -tln 2>/dev/null | grep -q ":$new_ssh_port "; then
-                                print_status "ERROR" "Port $new_ssh_port is already in use"
-                            else
-                                SSH_PORT="$new_ssh_port"
-                                break
-                            fi
-                        fi
-                    done
-                    ;;
-                5)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enable GUI mode? (y/n, current: $GUI_MODE): ")" gui_input
-                        gui_input="${gui_input:-}"
-                        if [[ "$gui_input" =~ ^[Yy]$ ]]; then 
-                            GUI_MODE=true
-                            break
-                        elif [[ "$gui_input" =~ ^[Nn]$ ]]; then
-                            GUI_MODE=false
-                            break
-                        elif [ -z "$gui_input" ]; then
-                            # Keep current value if user just pressed Enter
-                            break
-                        else
-                            print_status "ERROR" "Please answer y or n"
-                        fi
-                    done
-                    ;;
-                6)
-                    read -p "$(print_status "INPUT" "Additional port forwards (current: ${PORT_FORWARDS:-None}): ")" new_port_forwards
-                    PORT_FORWARDS="${new_port_forwards:-$PORT_FORWARDS}"
-                    ;;
-                7)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enter new memory in MB (current: $MEMORY): ")" new_memory
-                        new_memory="${new_memory:-$MEMORY}"
-                        if validate_input "number" "$new_memory"; then
-                            MEMORY="$new_memory"
-                            break
-                        fi
-                    done
-                    ;;
-                8)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enter new CPU count (current: $CPUS): ")" new_cpus
-                        new_cpus="${new_cpus:-$CPUS}"
-                        if validate_input "number" "$new_cpus"; then
-                            CPUS="$new_cpus"
-                            break
-                        fi
-                    done
-                    ;;
-                9)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enter new disk size (current: $DISK_SIZE): ")" new_disk_size
-                        new_disk_size="${new_disk_size:-$DISK_SIZE}"
-                        if validate_input "size" "$new_disk_size"; then
-                            DISK_SIZE="$new_disk_size"
-                            break
-                        fi
-                    done
-                    ;;
-                0)
-                    return 0
-                    ;;
-                *)
-                    print_status "ERROR" "Invalid selection"
-                    continue
-                    ;;
-            esac
-            
-            # Recreate seed image with new configuration if user/password/hostname changed
-            if [[ "$edit_choice" -eq 1 || "$edit_choice" -eq 2 || "$edit_choice" -eq 3 ]]; then
-                print_status "INFO" "Updating cloud-init configuration..."
-                setup_vm_image
-            fi
-            
-            # Save configuration
-            save_vm_config
-            
-            read -p "$(print_status "INPUT" "Continue editing? (y/N): ")" continue_editing
-            if [[ ! "$continue_editing" =~ ^[Yy]$ ]]; then
-                break
-            fi
-        done
-    fi
-}
-
-# Function to resize VM disk
-resize_vm_disk() {
-    local vm_name=$1
-    
-    if load_vm_config "$vm_name"; then
-        print_status "INFO" "Current disk size: $DISK_SIZE"
-        
-        while true; do
-            read -p "$(print_status "INPUT" "Enter new disk size (e.g., 50G): ")" new_disk_size
-            if validate_input "size" "$new_disk_size"; then
-                if [[ "$new_disk_size" == "$DISK_SIZE" ]]; then
-                    print_status "INFO" "New disk size is the same as current size. No changes made."
-                    return 0
-                fi
-                
-                # Check if new size is smaller than current (not recommended)
-                local current_size_num=${DISK_SIZE%[GgMm]}
-                local new_size_num=${new_disk_size%[GgMm]}
-                local current_unit=${DISK_SIZE: -1}
-                local new_unit=${new_disk_size: -1}
-                
-                # Convert both to MB for comparison
-                if [[ "$current_unit" =~ [Gg] ]]; then
-                    current_size_num=$((current_size_num * 1024))
-                fi
-                if [[ "$new_unit" =~ [Gg] ]]; then
-                    new_size_num=$((new_size_num * 1024))
-                fi
-                
-                if [[ $new_size_num -lt $current_size_num ]]; then
-                    print_status "WARN" "Shrinking disk size is not recommended and may cause data loss!"
-                    read -p "$(print_status "INPUT" "Are you sure you want to continue? (y/N): ")" confirm_shrink
-                    if [[ ! "$confirm_shrink" =~ ^[Yy]$ ]]; then
-                        print_status "INFO" "Disk resize cancelled."
-                        return 0
-                    fi
-                fi
-                
-                # Resize the disk
-                print_status "INFO" "Resizing disk to $new_disk_size..."
-                if qemu-img resize "$IMG_FILE" "$new_disk_size"; then
-                    DISK_SIZE="$new_disk_size"
-                    save_vm_config
-                    print_status "SUCCESS" "Disk resized successfully to $new_disk_size"
-                else
-                    print_status "ERROR" "Failed to resize disk"
-                    return 1
-                fi
-                break
-            fi
-        done
     fi
 }
 
@@ -749,10 +529,7 @@ main_menu() {
             echo "  2) Start a VM"
             echo "  3) Stop a VM"
             echo "  4) Show VM info"
-            echo "  5) Edit VM configuration"
-            echo "  6) Delete a VM"
-            echo "  7) Resize VM disk"
-            echo "  8) Show VM performance"
+            echo "  5) Show VM performance"
         fi
         echo "  0) Exit"
         echo
@@ -794,36 +571,6 @@ main_menu() {
                 fi
                 ;;
             5)
-                if [ $vm_count -gt 0 ]; then
-                    read -p "$(print_status "INPUT" "Enter VM number to edit: ")" vm_num
-                    if [[ "$vm_num" =~ ^[0-9]+$ ]] && [ "$vm_num" -ge 1 ] && [ "$vm_num" -le $vm_count ]; then
-                        edit_vm_config "${vms[$((vm_num-1))]}"
-                    else
-                        print_status "ERROR" "Invalid selection"
-                    fi
-                fi
-                ;;
-            6)
-                if [ $vm_count -gt 0 ]; then
-                    read -p "$(print_status "INPUT" "Enter VM number to delete: ")" vm_num
-                    if [[ "$vm_num" =~ ^[0-9]+$ ]] && [ "$vm_num" -ge 1 ] && [ "$vm_num" -le $vm_count ]; then
-                        delete_vm "${vms[$((vm_num-1))]}"
-                    else
-                        print_status "ERROR" "Invalid selection"
-                    fi
-                fi
-                ;;
-            7)
-                if [ $vm_count -gt 0 ]; then
-                    read -p "$(print_status "INPUT" "Enter VM number to resize disk: ")" vm_num
-                    if [[ "$vm_num" =~ ^[0-9]+$ ]] && [ "$vm_num" -ge 1 ] && [ "$vm_num" -le $vm_count ]; then
-                        resize_vm_disk "${vms[$((vm_num-1))]}"
-                    else
-                        print_status "ERROR" "Invalid selection"
-                    fi
-                fi
-                ;;
-            8)
                 if [ $vm_count -gt 0 ]; then
                     read -p "$(print_status "INPUT" "Enter VM number to show performance: ")" vm_num
                     if [[ "$vm_num" =~ ^[0-9]+$ ]] && [ "$vm_num" -ge 1 ] && [ "$vm_num" -le $vm_count ]; then
