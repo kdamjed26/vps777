@@ -361,13 +361,11 @@ start_vm() {
             setup_vm_image
         fi
         
-        # Base QEMU command
+        # Base QEMU command without KVM
         local qemu_cmd=(
             qemu-system-x86_64
-            -enable-kvm
             -m "$MEMORY"
             -smp "$CPUS"
-            -cpu host
             -drive "file=$IMG_FILE,format=qcow2,if=virtio"
             -drive "file=$SEED_FILE,format=raw,if=virtio"
             -boot order=c
@@ -399,7 +397,7 @@ start_vm() {
             -device virtio-rng-pci,rng=rng0
         )
 
-        print_status "INFO" "Starting QEMU..."
+        print_status "INFO" "Starting QEMU without KVM..."
         "${qemu_cmd[@]}"
         
         print_status "INFO" "VM $vm_name has been shut down"
